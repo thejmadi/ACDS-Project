@@ -26,9 +26,9 @@ def xDot(t, x, const, axis):
     if axis == 0:
         return (w_1*np.sin(th) + w_2*np.cos(th) - w0*np.sin(psi)*np.cos(phi)) / np.cos(psi)
     elif axis == 1:
-        return w_1*np.cos(th) - w_2*np.sin(th) - w0*np.sin(phi)
+        return w_1*np.cos(th) - w_2*np.sin(th) + w0*np.sin(phi)
     elif axis == 2:
-        return (w_1*np.sin(th) + w_2*np.cos(th))*np.tan(psi) - w0*np.cos(phi)/np.cos(psi)
+        return (w_1*np.sin(th) + w_2*np.cos(th))*np.tan(psi) - w0*np.cos(phi)/np.cos(psi) + w_3
 
 ############# RK4 Function ##############
 
