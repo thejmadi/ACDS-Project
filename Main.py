@@ -15,7 +15,7 @@ def main():
                  plate_spec = np.array([0.8, 0.2, 0.2]), plate_diff = np.array([0.1, 0.1, 0.1]),
                  mu = 3.986004354360959e5, w0 = 7.29212e-5)
     Period = 2*np.pi*np.sqrt((const['a']**3)/const["mu"])
-    t = np.arange(0, 3*Period, 1)
+    t = np.arange(0, 3*Period, 0.1)
     
     angles = np.zeros((6, t.size))
     angles[:, 0] = np.radians(np.array([5, -4, 10, 0.5, 0.7, 6]))
