@@ -6,6 +6,7 @@ Created on Sat Oct 14 17:09:23 2023
 """
 
 import numpy as np
+import matplotlib.pyplot as plt
 
 def xDot(t, x, const, axis):
     phi = x[0]
@@ -25,19 +26,6 @@ def xDot(t, x, const, axis):
     tau_1 = 0
     tau_2 = 0
     tau_3 = 0
-    """
-    dphi = x[3]
-    dpsi = x[4]
-    dth = x[5]
-    """
-    #w_0 = w0 * np.array([np.sin(th)*np.sin(psi)*np.cos(phi) - np.cos(th)*np.sin(phi),
-    #                              np.cos(th)*np.sin(psi)*np.cos(phi) + np.sin(th)*np.sin(phi),
-    #                              np.cos(psi)*np.cos(phi)])
-    """
-    w_1 = dphi*np.cos(psi)*np.sin(th) + dpsi*np.cos(th) + w_0[0]
-    w_2 = dphi*np.cos(psi)*np.cos(th) - dpsi*np.sin(th) + w_0[1]
-    w_3 = dth - dphi*np.sin(psi) + w_0[2]
-    """
     if axis == 0:
         return (w1*np.sin(th) + w2*np.cos(th) - w0*np.sin(psi)*np.cos(phi))/np.cos(psi)
     elif axis == 1:
@@ -77,6 +65,8 @@ def RK4(t, x, const):
         K.fill(0)
     return x
 
+############# Scipy Checker #############
+
 def scipy(t, x):
     phi = x[0]
     if np.cos(phi) == 0:
@@ -101,4 +91,18 @@ def scipy(t, x):
             (tau_1 - (I3-I2)*w3*w2)/I1,
             (tau_2 - (I1-I3)*w1*w3)/I2,
             (tau_3 - (I2-I1)*w2*w1)/I3]
-            
+
+############## Plotter ###############
+
+def PlotAngles(t, x, title, xlab, ylab, labels):
+    plt.rcParams['figure.dpi'] = 300
+    c = ['b', 'g', 'r']
+    for k in range(x.shape[0]):
+        plt.plot(t, x[k], c = c[k], label = labels[k])
+    plt.title(title)
+    plt.xlabel(xlab)
+    plt.ylabel(ylab)
+    plt.legend(loc="best")
+    plt.grid()
+    plt.show()
+    return
