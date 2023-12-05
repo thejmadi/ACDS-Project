@@ -97,29 +97,14 @@ def ElecMag(t, x, const):
     Re = 6371.2
     alp_m = np.radians(108.2)
     th_m = np.radians(169.7)
-    m_v = np.zeros((3, 1))
     m_v = np.array([[np.sin(th_m)*np.cos(alp_m)],
                     [np.sin(th_m)*np.sin(alp_m)],
                     [np.cos(th_m)]])
-    m_hat = np.zeros((3, 1))
-    r_hat = np.zeros((3, 1))
+    #m_hat = np.zeros((3, 1))
+    #r_hat = np.zeros((3, 1))
     B = np.zeros((3, 1))
     B_0 = 3.11e-5
-    '''
-    m_hat = (ECIToECEF(w_e).T @ (m_v/la.norm(m_v))).reshape((3, 1))
-    r_hat = (x[6:9]/la.norm(x[6:9])).reshape((3, 1))
-    B = B_0 * ((Re/la.norm(x[6:9]))**3)*(3*(m_hat[:, 0] @ r_hat)*r_hat - m_hat)
-    
-    B = ECIToBody(lat, const["i"], const["Om"], x[:3]) @ B
-    EM = np.cross(const["M"], B.reshape(3))
-    
-    m_hat = (ECIToECEF(w_e).T @ (m_v/la.norm(m_v))).reshape((3, 1))
-    r_hat = (x[6:9]/la.norm(x[6:9])).reshape((3, 1))
-    B = B_0 * ((Re/la.norm(x[6:9]))**3)*(3*(m_hat[:, 0] @ r_hat)*r_hat - m_hat)
-    
-    B = ECIToBody(const["w0"]*t, const["i"], lat, x[:3]) @ B
-    EM = np.cross(const["M"], B.reshape(3))
-    '''
+
     m_hat = (ECIToOrbit(const["w0"]*t, const["i"], w_e) @ (m_v/la.norm(m_v))).reshape((3, 1))
     r_hat = np.array([[const["a"]], [0], [0]])/const["a"]
     B = B_0 * ((Re/const["a"])**3)*(3*(m_hat[:, 0] @ r_hat)*r_hat - m_hat)
@@ -134,9 +119,6 @@ def SolPres(t, x, const):
     # Solar Torques
     w_year = 0#2*np.pi/365
     w_e = const["Om"]
-    # Is SCIToECI correct?
-    # Where is rho_a used
-    #s = ECIToBody(lat, const["i"], const["Om"], x) @ SCIToECI() @ np.array([[np.cos(w_year*t)], [np.sin(w_year*t)], [0]])
     s = ECIToBody(const["w0"]*t, const["i"], w_e, x) @ SCIToECI() @ np.array([[np.cos(w_year*t)], [np.sin(w_year*t)], [0]])
     s_hat = (s / la.norm(s)).reshape(3)
     
@@ -151,7 +133,6 @@ def SolPres(t, x, const):
         n_hat = n / la.norm(n)
         rho_s = const["plate_spec"][k]
         rho_d = const["plate_diff"][k]
-        #rho_a = const["plate_abs"][k]
         
         F_SP = P*A*np.dot(n_hat, s_hat)*((1-rho_s)*s_hat + (rho_s + 2*rho_d/3) * n_hat)
         SP += np.cross(r, F_SP)
@@ -177,7 +158,6 @@ def xDot(t, x, const, axis):
     EM = ElecMag(t, x, const)
     SP = SolPres(t, x, const)
     tau = GG + EM + SP
-    #tau = np.zeros(3)
     
     if axis == 0:
         return (w1*np.sin(th) + w2*np.cos(th) - w0*np.sin(psi)*np.cos(phi))/np.cos(psi)
@@ -191,6 +171,8 @@ def xDot(t, x, const, axis):
         return (tau[1] - (I1-I3)*w1*w3)/I2
     elif axis == 5:
         return (tau[2] - (I2-I1)*w2*w1)/I3
+    
+    # Position and Velocity Integration, not needed now
     '''
     elif axis == 6:
         return x[9]
@@ -204,26 +186,6 @@ def xDot(t, x, const, axis):
         return -const["mu"] * x[7] / la.norm(x[6:9])**3
     elif axis == 11:
         return -const["mu"] * x[8] / la.norm(x[6:9])**3
-    '''
-    '''
-    elif axis == 12:
-        return GG[0]
-    elif axis == 13:
-        return GG[1]
-    elif axis == 14:
-        return GG[2]
-    elif axis == 15:
-        return EM[0]
-    elif axis == 16:
-        return EM[1]
-    elif axis == 17:
-        return EM[2]
-    elif axis == 18:
-        return SP[0]
-    elif axis == 19:
-        return SP[1]
-    elif axis == 20:
-        return SP[2]
     '''
 
 ############# RK4 Function ##############
@@ -269,7 +231,8 @@ def scipy(t, x, torques, torque_t):
                  D = 3, I_sat = np.diag([4500, 6000, 7000]), I_w = 0.5, plate_areas = np.array([5, 7, 7]),
                  plate_CoM = np.array([[0.1, 0.1, 0], [2, 0, 0], [-2, 0, 0]]), plate_abs = np.array([0.1, 0.7, 0.7]),
                  plate_spec = np.array([0.8, 0.2, 0.2]), plate_diff = np.array([0.1, 0.1, 0.1]),
-                 mu = 3.986004354360959e5, P_coeff = 4.644e-6, beta = np.radians(30), M = np.array([3, 3, 3]))
+                 mu = 3.986004354360959e5, P_coeff = 4.644e-6, beta = np.radians(30), M = np.array([3, 3, 3]),
+                 k_th = np.array([1, 1, 1]), tau_th = np.array([0, 0, 0]), target = np.radians(np.array([0, 30, 0])))
     const["plate_norms"] = np.array([[0, 0, 1],
                                      [0, np.sin(const["beta"]), np.cos(const["beta"])],
                                      [0, np.sin(const["beta"]), np.cos(const["beta"])]])
@@ -284,6 +247,9 @@ def scipy(t, x, torques, torque_t):
     w1 = x[3]
     w2 = x[4]
     w3 = x[5]
+    h1 = x[6]
+    h2 = x[7]
+    h3 = x[8]
     I1 = const["I_sat"][0, 0]
     I2 = const["I_sat"][1, 1]
     I3 = const["I_sat"][2, 2]
@@ -293,24 +259,21 @@ def scipy(t, x, torques, torque_t):
     EM = ElecMag(t, x, const)
     SP = SolPres(t, x, const)
     tau = GG + EM + SP
-    #tau = np.zeros(3)#GG + EM + SP
+    
+    tau_w = const["k_th"]*(const["tau_th"]*x[3:6] + (x[:3]-const["target"]))
+
     torques.append(np.concatenate((GG, EM, SP)))
     torque_t.append(t)
     print(t)
     return [(w1*np.sin(th) + w2*np.cos(th) - w0*np.sin(psi)*np.cos(phi))/np.cos(psi),
             (w1*np.cos(th) - w2*np.sin(th) + w0*np.sin(phi)),
             (w1*np.sin(th) + w2*np.cos(th))*np.tan(psi) - w0*np.cos(phi)/np.cos(psi) + w3,
-            (tau[0] - (I3-I2)*w3*w2)/I1,
-            (tau[1] - (I1-I3)*w1*w3)/I2,
-            (tau[2] - (I2-I1)*w2*w1)/I3]
-'''
-            x[9],
-            x[10],
-            x[11],
-            -const["mu"] * x[6] / la.norm(x[6:9]),
-            -const["mu"] * x[7] / la.norm(x[6:9]),
-            -const["mu"] * x[8] / la.norm(x[6:9])]
-            '''
+            (tau[0] - (I3-I2)*w3*w2 - (h3*w2-h2*w3) - tau_w[0])/I1,
+            (tau[1] - (I1-I3)*w1*w3 - (h1*w3-h3*w1) - tau_w[1])/I2,
+            (tau[2] - (I2-I1)*w2*w1 - (h2*w1-h1*w2) - tau_w[2])/I3,
+            tau_w[0],
+            tau_w[1],
+            tau_w[2]]
 
 ############## Plotter ###############
 
@@ -331,6 +294,14 @@ def PlotState(t, x):
     plt.title("Angular Velocities vs. Fractional Orbit")
     plt.xlabel("Fractional Orbit")
     plt.ylabel("Angular Velocity (rad/sec)")
+    plt.legend(loc="best")
+    plt.grid()
+    plt.show()
+    for k in range(6, 9):
+        plt.plot(t, x[k], c = c[k-6], label = labels[k-6])
+    plt.title("Wheel Angular Momentum vs. Fractional Orbit")
+    plt.xlabel("Fractional Orbit")
+    plt.ylabel("Angular Momentum ()")
     plt.legend(loc="best")
     plt.grid()
     plt.show()
