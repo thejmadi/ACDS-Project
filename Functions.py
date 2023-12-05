@@ -12,13 +12,43 @@ import matplotlib.pyplot as plt
 def SCIToECI():
     angle = np.radians(-23.5)
     return np.array([[1, 0, 0],
-                    [0, np.cos(angle), -np.sin(angle)],
-                    [0, np.sin(angle), np.cos(angle)]])
+                    [0, np.cos(angle), np.sin(angle)],
+                    [0, -np.sin(angle), np.cos(angle)]])
 
 def ECIToECEF(angle):
     return np.array([[np.cos(angle), np.sin(angle), 0],
                     [-np.sin(angle), np.cos(angle), 0],
                     [0, 0, 1]])
+
+def ECIToOrbit(lat, i, Om):
+    R_O_ECI_1 = np.array([[np.cos(lat), np.sin(lat), 0],
+                          [-np.sin(lat), np.cos(lat), 0],
+                          [0, 0, 1]])
+    R_O_ECI_2 = np.array([[1, 0, 0],
+                          [0, np.cos(i), np.sin(i)],
+                          [0, -np.sin(i), np.cos(i)]])
+    R_O_ECI_3 = np.array([[np.cos(Om), np.sin(Om), 0],
+                          [-np.sin(Om), np.cos(Om), 0],
+                          [0, 0, 1]])
+    R_O_ECI = R_O_ECI_1 @ (R_O_ECI_2 @ R_O_ECI_3)
+    return R_O_ECI
+
+def OrbitToBody(x):
+    phi = x[0]
+    psi = x[1]
+    th = x[2]
+    R_B_O_1 = np.array([[np.cos(th), np.sin(th), 0],
+                        [-np.sin(th), np.cos(th), 0],
+                        [0, 0, 1]])
+    R_B_O_2 = np.array([[1, 0, 0],
+                        [0, np.cos(psi), np.sin(psi)],
+                        [0, -np.sin(psi), np.cos(psi)]])
+    R_B_O_3 = np.array([[np.cos(phi), 0, -np.sin(phi)],
+                        [0, 1, 0],
+                        [np.sin(phi), 0, np.cos(phi)]])
+    
+    R_B_O = R_B_O_1 @ (R_B_O_2 @ R_B_O_3)
+    return R_B_O
 
 def ECIToBody(lat, i, Om, x):
     phi = x[0]
@@ -41,9 +71,9 @@ def ECIToBody(lat, i, Om, x):
     R_B_O_2 = np.array([[1, 0, 0],
                         [0, np.cos(psi), np.sin(psi)],
                         [0, -np.sin(psi), np.cos(psi)]])
-    R_B_O_3 = np.array([[np.cos(phi), np.sin(phi), 0],
-                        [-np.sin(phi), np.cos(phi), 0],
-                        [0, 0, 1]])
+    R_B_O_3 = np.array([[np.cos(phi), 0, -np.sin(phi)],
+                        [0, 1, 0],
+                        [np.sin(phi), 0, np.cos(phi)]])
     
     R_B_O = R_B_O_1 @ (R_B_O_2 @ R_B_O_3)
     return R_B_O @ R_O_ECI
@@ -59,44 +89,62 @@ def GravGrad(w0, x, I):
     GG[0] = 3*(w0**2)*np.cos(psi)*np.sin(phi)*(np.cos(th)*np.sin(psi)*np.sin(phi)-np.sin(th)*np.cos(phi))*(I3-I2)
     GG[1] = 3*(w0**2)*np.cos(psi)*np.sin(phi)*(np.sin(th)*np.sin(psi)*np.sin(phi)+np.cos(th)*np.cos(phi))*(I1-I3)
     GG[2] = 3*(w0**2)*(np.cos(th)*np.cos(phi)+np.sin(th)*np.sin(psi)*np.sin(phi))*(np.cos(th)*np.sin(psi)*np.sin(phi)-np.sin(th)*np.cos(phi))*(I2-I1)
-    return GG.reshape((3, 1))
+    return GG
 
-def ElecMag(t, x, lat, const):
+def ElecMag(t, x, const):
     # EM Torques
-    w_e = t*7.29212e-5
+    w_e = const["Om"]-t*2*np.pi/86400
     Re = 6371.2
     alp_m = np.radians(108.2)
     th_m = np.radians(169.7)
-    g = (1e-9)*np.array([-29554.63, -1669.05, 5077.99]).reshape((3, 1))
     m_v = np.zeros((3, 1))
-    m_v = (Re**3)*g
+    m_v = np.array([[np.sin(th_m)*np.cos(alp_m)],
+                    [np.sin(th_m)*np.sin(alp_m)],
+                    [np.cos(th_m)]])
     m_hat = np.zeros((3, 1))
     r_hat = np.zeros((3, 1))
     B = np.zeros((3, 1))
     B_0 = 3.11e-5
-    
+    '''
     m_hat = (ECIToECEF(w_e).T @ (m_v/la.norm(m_v))).reshape((3, 1))
     r_hat = (x[6:9]/la.norm(x[6:9])).reshape((3, 1))
     B = B_0 * ((Re/la.norm(x[6:9]))**3)*(3*(m_hat[:, 0] @ r_hat)*r_hat - m_hat)
     
     B = ECIToBody(lat, const["i"], const["Om"], x[:3]) @ B
     EM = np.cross(const["M"], B.reshape(3))
-    return EM
+    
+    m_hat = (ECIToECEF(w_e).T @ (m_v/la.norm(m_v))).reshape((3, 1))
+    r_hat = (x[6:9]/la.norm(x[6:9])).reshape((3, 1))
+    B = B_0 * ((Re/la.norm(x[6:9]))**3)*(3*(m_hat[:, 0] @ r_hat)*r_hat - m_hat)
+    
+    B = ECIToBody(const["w0"]*t, const["i"], lat, x[:3]) @ B
+    EM = np.cross(const["M"], B.reshape(3))
+    '''
+    m_hat = (ECIToOrbit(const["w0"]*t, const["i"], w_e) @ (m_v/la.norm(m_v))).reshape((3, 1))
+    r_hat = np.array([[const["a"]], [0], [0]])/const["a"]
+    B = B_0 * ((Re/const["a"])**3)*(3*(m_hat[:, 0] @ r_hat)*r_hat - m_hat)
+    
+    B = OrbitToBody(x[:3]) @ B
+    EM = np.cross(const["M"], B.reshape(3))
+    
+    return EM.reshape(3)
 
-def SolPres(t, x, lat, const):
+def SolPres(t, x, const):
     SP = np.zeros(3)
     # Solar Torques
-    w_year = 2*np.pi/365
+    w_year = 0#2*np.pi/365
+    w_e = const["Om"]
     # Is SCIToECI correct?
     # Where is rho_a used
-    s = ECIToBody(lat, const["i"], const["Om"], x) @ SCIToECI() @ np.array([[np.cos(w_year*t)], [np.sin(w_year*t)], [0]])
+    #s = ECIToBody(lat, const["i"], const["Om"], x) @ SCIToECI() @ np.array([[np.cos(w_year*t)], [np.sin(w_year*t)], [0]])
+    s = ECIToBody(const["w0"]*t, const["i"], w_e, x) @ SCIToECI() @ np.array([[np.cos(w_year*t)], [np.sin(w_year*t)], [0]])
     s_hat = (s / la.norm(s)).reshape(3)
     
     for k in range(3):
         P = const["P_coeff"]
         A = const["plate_areas"][k]
         if(k != 0):
-            r = const["plate_CoM"][k, :] - const["plate_CoM"][0, :]
+            r = const["plate_CoM"][k, :] #- const["plate_CoM"][0, :]
         else:
             r = const["plate_CoM"][0, :]
         n = const["plate_norms"][k, :]
@@ -124,11 +172,10 @@ def xDot(t, x, const, axis):
     I2 = const["I_sat"][1, 1]
     I3 = const["I_sat"][2, 2]
     w0 = const["w0"]
-    lat = const["arg_per"] + w0*t
     
     GG = GravGrad(w0, x, const["I_sat"]).reshape(3)
-    EM = ElecMag(t, x, lat, const)
-    SP = SolPres(t, x, lat, const)
+    EM = ElecMag(t, x, const)
+    SP = SolPres(t, x, const)
     tau = GG + EM + SP
     #tau = np.zeros(3)
     
@@ -144,6 +191,7 @@ def xDot(t, x, const, axis):
         return (tau[1] - (I1-I3)*w1*w3)/I2
     elif axis == 5:
         return (tau[2] - (I2-I1)*w2*w1)/I3
+    '''
     elif axis == 6:
         return x[9]
     elif axis == 7:
@@ -151,11 +199,12 @@ def xDot(t, x, const, axis):
     elif axis == 8:
         return x[11]
     elif axis == 9:
-        return -const["mu"] * x[6] / la.norm(x[6:9])
+        return -const["mu"] * x[6] / la.norm(x[6:9])**3
     elif axis == 10:
-        return -const["mu"] * x[7] / la.norm(x[6:9])
+        return -const["mu"] * x[7] / la.norm(x[6:9])**3
     elif axis == 11:
-        return -const["mu"] * x[8] / la.norm(x[6:9])
+        return -const["mu"] * x[8] / la.norm(x[6:9])**3
+    '''
     '''
     elif axis == 12:
         return GG[0]
@@ -179,13 +228,16 @@ def xDot(t, x, const, axis):
 
 ############# RK4 Function ##############
 
-def RK4(t, x, const):
+def RK4(t, x, const, torques):
     # Necessary const parameters
     n = t.size
     t_step = t[1] - t[0]
     num_x = int(x.shape[0]) # Num of state variables
 
     K = np.zeros((num_x, 4))
+    torques[:3, 0] = GravGrad(const["w0"], x[:, 0], const["I_sat"])
+    torques[3:6, 0] = ElecMag(t[0], x[:, 0], const)
+    torques[6:9, 0] = SolPres(t[0], x[:, 0], const)
     for i in range(1, n):
         print(t[i])
         for k in range(num_x):
@@ -202,11 +254,17 @@ def RK4(t, x, const):
         #    x[k+3, i] = xDot(t[i], np.concatenate((x[:3, i], x[3:, i-1]), axis=None), const, k)
         
         K.fill(0)
-    return x
+        torques[:3, i] = GravGrad(const["w0"], x[:, i], const["I_sat"])
+        torques[3:6, i] = ElecMag(t[i], x[:, i], const)
+        torques[6:9, i] = SolPres(t[i], x[:, i], const)
+        #print(t[i])
+        #print(torques[3:6, i])
+        #print()
+    return x, torques
 
 ############# Scipy Checker #############
 
-def scipy(t, x):
+def scipy(t, x, torques, torque_t):
     const = dict(a = 7000, i = np.radians(83), Om = np.radians(-70), f = np.radians(0), arg_per = np.radians(0),
                  D = 3, I_sat = np.diag([4500, 6000, 7000]), I_w = 0.5, plate_areas = np.array([5, 7, 7]),
                  plate_CoM = np.array([[0.1, 0.1, 0], [2, 0, 0], [-2, 0, 0]]), plate_abs = np.array([0.1, 0.7, 0.7]),
@@ -230,36 +288,101 @@ def scipy(t, x):
     I2 = const["I_sat"][1, 1]
     I3 = const["I_sat"][2, 2]
     w0 = const["w0"]
-    lat = const["arg_per"] + w0*t
     
-    #GG = GravGrad(w0, x, const["I"])
-    EM = ElecMag(t, x, lat, const)
-    #SP = SolPres(t, x, lat, const)
-    tau = EM#GG + EM + SP
+    GG = GravGrad(w0, x, const["I_sat"])
+    EM = ElecMag(t, x, const)
+    SP = SolPres(t, x, const)
+    tau = GG + EM + SP
+    #tau = np.zeros(3)#GG + EM + SP
+    torques.append(np.concatenate((GG, EM, SP)))
+    torque_t.append(t)
+    print(t)
     return [(w1*np.sin(th) + w2*np.cos(th) - w0*np.sin(psi)*np.cos(phi))/np.cos(psi),
             (w1*np.cos(th) - w2*np.sin(th) + w0*np.sin(phi)),
             (w1*np.sin(th) + w2*np.cos(th))*np.tan(psi) - w0*np.cos(phi)/np.cos(psi) + w3,
             (tau[0] - (I3-I2)*w3*w2)/I1,
             (tau[1] - (I1-I3)*w1*w3)/I2,
-            (tau[2] - (I2-I1)*w2*w1)/I3,
+            (tau[2] - (I2-I1)*w2*w1)/I3]
+'''
             x[9],
             x[10],
             x[11],
             -const["mu"] * x[6] / la.norm(x[6:9]),
             -const["mu"] * x[7] / la.norm(x[6:9]),
             -const["mu"] * x[8] / la.norm(x[6:9])]
+            '''
 
 ############## Plotter ###############
 
-def PlotAngles(t, x, title, xlab, ylab, labels):
+def PlotState(t, x):
     plt.rcParams['figure.dpi'] = 300
     c = ['b', 'g', 'r']
+    labels = ['Axis 1', 'Axis 2', 'Axis 3']
     for k in range(3):
         plt.plot(t, x[k], c = c[k], label = labels[k])
-    plt.title(title)
-    plt.xlabel(xlab)
-    plt.ylabel(ylab)
+    plt.title("Angles vs. Fractional Orbit")
+    plt.xlabel("Fractional Orbit")
+    plt.ylabel("Angles (rad)")
     plt.legend(loc="best")
     plt.grid()
     plt.show()
+    for k in range(3, 6):
+        plt.plot(t, x[k], c = c[k-3], label = labels[k-3])
+    plt.title("Angular Velocities vs. Fractional Orbit")
+    plt.xlabel("Fractional Orbit")
+    plt.ylabel("Angular Velocity (rad/sec)")
+    plt.legend(loc="best")
+    plt.grid()
+    plt.show()
+    '''
+    for k in range(6, 9):
+        plt.plot(t, x[k], c = c[k-6], label = labels[k-6])
+    plt.title("Position vs. Fractional Orbit")
+    plt.xlabel("Fractional Orbit")
+    plt.ylabel("Position (km)")
+    plt.legend(loc="best")
+    plt.grid()
+    plt.show()
+    for k in range(9, 12):
+        plt.plot(t, x[k], c = c[k-9], label = labels[k-9])
+    plt.title("Velocity vs. Fractional Orbit")
+    plt.xlabel("Fractional Orbit")
+    plt.ylabel("Velocity (km/sec)")
+    plt.legend(loc="best")
+    plt.grid()
+    plt.show()
+    '''
+    return
+
+def PlotTorques(t, tor):
+    plt.rcParams['figure.dpi'] = 300
+    c = ['b', 'g', 'r']
+    labels = ['Axis 1', 'Axis 2', 'Axis 3']
+    tor_new = np.zeros((9, len(t)))
+    for i in range(0, len(t)):
+        tor_new[:, i] = tor[i]
+    for k in range(3):
+        plt.plot(t, tor_new[k, :], c = c[k], label = labels[k])
+    plt.title("GG Torque vs. Fractional Orbit")
+    plt.xlabel("Fractional Orbit")
+    plt.ylabel("GG Torque")
+    plt.legend(loc="best")
+    plt.grid()
+    plt.show()
+    for k in range(3, 6):
+        plt.plot(t, tor_new[k, :], c = c[k-3], label = labels[k-3])
+    plt.title("EM Torque vs. Fractional Orbit")
+    plt.xlabel("Fractional Orbit")
+    plt.ylabel("EM Torque")
+    plt.legend(loc="best")
+    plt.grid()
+    plt.show()
+    for k in range(6, 9):
+        plt.plot(t, tor_new[k, :], c = c[k-6], label = labels[k-6])
+    plt.title("SP Torque vs. Fractional Orbit")
+    plt.xlabel("Fractional Orbit")
+    plt.ylabel("SP Torque")
+    plt.legend(loc="best")
+    plt.grid()
+    plt.show()    
     return
